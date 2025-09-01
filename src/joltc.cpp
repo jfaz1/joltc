@@ -8183,6 +8183,40 @@ bool JPH_CharacterVirtual_HasCollidedWithCharacter(JPH_CharacterVirtual* charact
 	return AsCharacterVirtual(character)->HasCollidedWith(AsCharacterVirtual(other));
 }
 
+void JPH_CharacterVirtual_CheckCollision(const JPH_CharacterVirtual* character,
+	const JPH_RVec3* position, const JPH_Quat* rotation, const JPH_Vec3* movementDirection,
+	float maxSeparationDistance, const JPH_Shape* shape, const JPH_RVec3* baseOffset,
+	JPH_CollideShapeCollectorCallback* callback, void* userData,
+	JPH_ObjectLayer layer, JPH_PhysicsSystem* system,
+	const JPH_BodyFilter* bodyFilter, const JPH_ShapeFilter* shapeFilter)
+{
+	JPH_ASSERT(character);
+	JPH_ASSERT(position);
+	JPH_ASSERT(rotation);
+	JPH_ASSERT(movementDirection);
+	JPH_ASSERT(shape);
+	JPH_ASSERT(baseOffset);
+	JPH_ASSERT(callback);
+	JPH_ASSERT(system);
+
+	auto joltLayer = static_cast<JPH::ObjectLayer>(layer);
+	CollideShapeCollectorCallback collector(callback, userData);
+
+	AsCharacterVirtual(character)->CheckCollision(
+		ToJolt(position),
+		ToJolt(rotation),
+		ToJolt(movementDirection),
+		maxSeparationDistance,
+		AsShape(shape),
+		ToJolt(baseOffset),
+		collector,
+		system->physicsSystem->GetDefaultBroadPhaseLayerFilter(joltLayer),
+		system->physicsSystem->GetDefaultLayerFilter(joltLayer),
+		ToJolt(bodyFilter),
+		ToJolt(shapeFilter)
+	);
+}
+
 /* CharacterContactListener */
 class ManagedCharacterContactListener final : public JPH::CharacterContactListener
 {

@@ -2343,6 +2343,13 @@ JPH_CAPI bool JPH_CharacterVirtual_HasCollidedWithBody(JPH_CharacterVirtual* cha
 JPH_CAPI bool JPH_CharacterVirtual_HasCollidedWith(JPH_CharacterVirtual* character, const JPH_CharacterID other);
 JPH_CAPI bool JPH_CharacterVirtual_HasCollidedWithCharacter(JPH_CharacterVirtual* character, const JPH_CharacterVirtual* other);
 
+JPH_CAPI void JPH_CharacterVirtual_CheckCollision(const JPH_CharacterVirtual* character,
+	const JPH_RVec3* position, const JPH_Quat* rotation, const JPH_Vec3* movementDirection,
+	float maxSeparationDistance, const JPH_Shape* shape, const JPH_RVec3* baseOffset,
+	JPH_CollideShapeCollectorCallback* callback, void* userData,
+	JPH_ObjectLayer layer, JPH_PhysicsSystem* system,
+	const JPH_BodyFilter* bodyFilter, const JPH_ShapeFilter* shapeFilter);
+
 /* CharacterContactListener */
 typedef struct JPH_CharacterContactListener_Procs {
 	void (JPH_API_CALL* OnAdjustBodyVelocity)(void* userData,
