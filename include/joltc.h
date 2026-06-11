@@ -75,6 +75,7 @@ typedef struct JPH_SimShapeFilter						JPH_SimShapeFilter;
 typedef struct JPH_PhysicsStepListener					JPH_PhysicsStepListener;
 typedef struct JPH_PhysicsSystem						JPH_PhysicsSystem;
 typedef struct JPH_PhysicsMaterial						JPH_PhysicsMaterial;
+typedef struct JPH_TempAllocator						JPH_TempAllocator;
 
 typedef struct JPH_LinearCurve							JPH_LinearCurve;
 
@@ -131,6 +132,7 @@ typedef struct JPH_BodyLockInterface					JPH_BodyLockInterface;
 typedef struct JPH_BroadPhaseQuery						JPH_BroadPhaseQuery;
 typedef struct JPH_NarrowPhaseQuery						JPH_NarrowPhaseQuery;
 typedef struct JPH_MotionProperties						JPH_MotionProperties;
+typedef struct JPH_SoftBodyMotionProperties					JPH_SoftBodyMotionProperties;
 typedef struct JPH_MassProperties						JPH_MassProperties;
 typedef struct JPH_Body									JPH_Body;
 
@@ -398,6 +400,13 @@ typedef enum JPH_SoftBodyBendType
 	JPH_SoftBodyBendType_Dihedral
 } JPH_SoftBodyBendType;
 
+typedef enum JPH_SoftBodyLRAType
+{
+	JPH_SoftBodyLRAType_None,
+	JPH_SoftBodyLRAType_EuclideanDistance,
+	JPH_SoftBodyLRAType_GeodesicDistance
+} JPH_SoftBodyLRAType;
+
 typedef enum JPH_BodyManager_ShapeColor
 {
 	JPH_BodyManager_ShapeColor_InstanceColor,				///< Random color per instance
@@ -541,6 +550,102 @@ typedef struct JPH_SoftFace
 	uint32_t vertex3;
 	uint32_t materialIndex;
 } JPH_SoftFace;
+
+typedef struct JPH_SoftBodyVertexAttributes
+{
+	float					compliance;
+	float					shearCompliance;
+	float					bendCompliance;
+	JPH_SoftBodyLRAType			lraType;
+	float					lraMaxDistanceMultiplier;
+} JPH_SoftBodyVertexAttributes;
+
+typedef struct JPH_SoftEdge
+{
+	uint32_t				vertex1;
+	uint32_t				vertex2;
+	float					restLength;
+	float					compliance;
+} JPH_SoftEdge;
+
+typedef struct JPH_SoftDihedralBend
+{
+	uint32_t				vertex1;
+	uint32_t				vertex2;
+	uint32_t				vertex3;
+	uint32_t				vertex4;
+	float					compliance;
+	float					initialAngle;
+} JPH_SoftDihedralBend;
+
+typedef struct JPH_SoftVolume
+{
+	uint32_t				vertex1;
+	uint32_t				vertex2;
+	uint32_t				vertex3;
+	uint32_t				vertex4;
+	float					sixRestVolume;
+	float					compliance;
+} JPH_SoftVolume;
+
+typedef struct JPH_SoftInvBind
+{
+	uint32_t				jointIndex;
+	JPH_Mat4				invBind;
+} JPH_SoftInvBind;
+
+typedef struct JPH_SoftSkinWeight
+{
+	uint32_t				invBindIndex;
+	float					weight;
+} JPH_SoftSkinWeight;
+
+typedef struct JPH_SoftSkinned
+{
+	uint32_t				vertex;
+	JPH_SoftSkinWeight			weights[4];
+	float					maxDistance;
+	float					backStopDistance;
+	float					backStopRadius;
+	uint32_t				normalInfo;
+} JPH_SoftSkinned;
+
+typedef struct JPH_SoftLRA
+{
+	uint32_t				vertex1;
+	uint32_t				vertex2;
+	float					maxDistance;
+} JPH_SoftLRA;
+
+typedef struct JPH_SoftRodStretchShear
+{
+	uint32_t				vertex1;
+	uint32_t				vertex2;
+	float					length;
+	float					invMass;
+	float					compliance;
+	JPH_Quat				bishop;
+} JPH_SoftRodStretchShear;
+
+typedef struct JPH_SoftRodBendTwist
+{
+	uint32_t				rod1;
+	uint32_t				rod2;
+	float					compliance;
+	JPH_Quat				omega0;
+} JPH_SoftRodBendTwist;
+
+typedef struct JPH_SoftBodyVertex
+{
+	JPH_Vec3				previousPosition;
+	JPH_Vec3				position;
+	JPH_Vec3				velocity;
+	JPH_Plane				collisionPlane;
+	int32_t					collidingShapeIndex;
+	bool					hasContact;
+	float					largestPenetration;
+	float					invMass;
+} JPH_SoftBodyVertex;
 
 typedef struct JPH_ContactSettings {
 	float					combinedFriction;
@@ -1617,6 +1722,8 @@ JPH_CAPI void JPH_BodyCreationSettings_SetMassPropertiesOverride(JPH_BodyCreatio
 
 /* JPH_SoftBodySharedSettings */
 JPH_CAPI JPH_SoftBodySharedSettings* JPH_SoftBodySharedSettings_Create(void);
+JPH_CAPI JPH_SoftBodySharedSettings* JPH_SoftBodySharedSettings_CreateCube(uint32_t gridSize, float gridSpacing);
+JPH_CAPI JPH_SoftBodySharedSettings* JPH_SoftBodySharedSettings_Clone(const JPH_SoftBodySharedSettings* settings);
 JPH_CAPI void JPH_SoftBodySharedSettings_Destroy(JPH_SoftBodySharedSettings* settings);
 
 JPH_CAPI void JPH_SoftBodySharedSettings_AddVertex(JPH_SoftBodySharedSettings* settings, const JPH_SoftVertex* vertex);
@@ -1632,7 +1739,82 @@ JPH_CAPI uint32_t JPH_SoftBodySharedSettings_GetFaceCount(const JPH_SoftBodyShar
 JPH_CAPI bool JPH_SoftBodySharedSettings_GetFace(const JPH_SoftBodySharedSettings* settings, uint32_t index, JPH_SoftFace* outFace);
 
 JPH_CAPI void JPH_SoftBodySharedSettings_CreateConstraints(JPH_SoftBodySharedSettings* settings, float compliance, JPH_SoftBodyBendType bendType);
+JPH_CAPI void JPH_SoftBodySharedSettings_CreateConstraints2(JPH_SoftBodySharedSettings* settings, const JPH_SoftBodyVertexAttributes* attributes, uint32_t attributeCount, JPH_SoftBodyBendType bendType, float angleTolerance);
+JPH_CAPI void JPH_SoftBodySharedSettings_CalculateEdgeLengths(JPH_SoftBodySharedSettings* settings);
+JPH_CAPI void JPH_SoftBodySharedSettings_CalculateRodProperties(JPH_SoftBodySharedSettings* settings);
+JPH_CAPI void JPH_SoftBodySharedSettings_CalculateLRALengths(JPH_SoftBodySharedSettings* settings, float maxDistanceMultiplier);
+JPH_CAPI void JPH_SoftBodySharedSettings_CalculateBendConstraintConstants(JPH_SoftBodySharedSettings* settings);
+JPH_CAPI void JPH_SoftBodySharedSettings_CalculateVolumeConstraintVolumes(JPH_SoftBodySharedSettings* settings);
+JPH_CAPI void JPH_SoftBodySharedSettings_CalculateSkinnedConstraintNormals(JPH_SoftBodySharedSettings* settings);
 JPH_CAPI void JPH_SoftBodySharedSettings_Optimize(JPH_SoftBodySharedSettings* settings);
+
+JPH_CAPI void JPH_SoftBodySharedSettings_AddEdgeConstraint(JPH_SoftBodySharedSettings* settings, const JPH_SoftEdge* edge);
+JPH_CAPI uint32_t JPH_SoftBodySharedSettings_GetEdgeConstraintCount(const JPH_SoftBodySharedSettings* settings);
+JPH_CAPI bool JPH_SoftBodySharedSettings_GetEdgeConstraint(const JPH_SoftBodySharedSettings* settings, uint32_t index, JPH_SoftEdge* outEdge);
+
+JPH_CAPI void JPH_SoftBodySharedSettings_AddDihedralBendConstraint(JPH_SoftBodySharedSettings* settings, const JPH_SoftDihedralBend* bend);
+JPH_CAPI uint32_t JPH_SoftBodySharedSettings_GetDihedralBendConstraintCount(const JPH_SoftBodySharedSettings* settings);
+JPH_CAPI bool JPH_SoftBodySharedSettings_GetDihedralBendConstraint(const JPH_SoftBodySharedSettings* settings, uint32_t index, JPH_SoftDihedralBend* outBend);
+
+JPH_CAPI void JPH_SoftBodySharedSettings_AddVolumeConstraint(JPH_SoftBodySharedSettings* settings, const JPH_SoftVolume* volume);
+JPH_CAPI uint32_t JPH_SoftBodySharedSettings_GetVolumeConstraintCount(const JPH_SoftBodySharedSettings* settings);
+JPH_CAPI bool JPH_SoftBodySharedSettings_GetVolumeConstraint(const JPH_SoftBodySharedSettings* settings, uint32_t index, JPH_SoftVolume* outVolume);
+
+JPH_CAPI void JPH_SoftBodySharedSettings_AddLRAConstraint(JPH_SoftBodySharedSettings* settings, const JPH_SoftLRA* lra);
+JPH_CAPI uint32_t JPH_SoftBodySharedSettings_GetLRAConstraintCount(const JPH_SoftBodySharedSettings* settings);
+JPH_CAPI bool JPH_SoftBodySharedSettings_GetLRAConstraint(const JPH_SoftBodySharedSettings* settings, uint32_t index, JPH_SoftLRA* outLRA);
+
+JPH_CAPI void JPH_SoftBodySharedSettings_AddInvBind(JPH_SoftBodySharedSettings* settings, const JPH_SoftInvBind* invBind);
+JPH_CAPI uint32_t JPH_SoftBodySharedSettings_GetInvBindCount(const JPH_SoftBodySharedSettings* settings);
+JPH_CAPI bool JPH_SoftBodySharedSettings_GetInvBind(const JPH_SoftBodySharedSettings* settings, uint32_t index, JPH_SoftInvBind* outInvBind);
+
+JPH_CAPI void JPH_SoftBodySharedSettings_AddSkinnedConstraint(JPH_SoftBodySharedSettings* settings, const JPH_SoftSkinned* skinned);
+JPH_CAPI uint32_t JPH_SoftBodySharedSettings_GetSkinnedConstraintCount(const JPH_SoftBodySharedSettings* settings);
+JPH_CAPI bool JPH_SoftBodySharedSettings_GetSkinnedConstraint(const JPH_SoftBodySharedSettings* settings, uint32_t index, JPH_SoftSkinned* outSkinned);
+
+JPH_CAPI void JPH_SoftBodySharedSettings_AddRodStretchShearConstraint(JPH_SoftBodySharedSettings* settings, const JPH_SoftRodStretchShear* rod);
+JPH_CAPI uint32_t JPH_SoftBodySharedSettings_GetRodStretchShearConstraintCount(const JPH_SoftBodySharedSettings* settings);
+JPH_CAPI bool JPH_SoftBodySharedSettings_GetRodStretchShearConstraint(const JPH_SoftBodySharedSettings* settings, uint32_t index, JPH_SoftRodStretchShear* outRod);
+
+JPH_CAPI void JPH_SoftBodySharedSettings_AddRodBendTwistConstraint(JPH_SoftBodySharedSettings* settings, const JPH_SoftRodBendTwist* rod);
+JPH_CAPI uint32_t JPH_SoftBodySharedSettings_GetRodBendTwistConstraintCount(const JPH_SoftBodySharedSettings* settings);
+JPH_CAPI bool JPH_SoftBodySharedSettings_GetRodBendTwistConstraint(const JPH_SoftBodySharedSettings* settings, uint32_t index, JPH_SoftRodBendTwist* outRod);
+
+/* JPH_SoftBodyMotionProperties */
+JPH_CAPI JPH_SoftBodyMotionProperties* JPH_Body_GetSoftBodyMotionProperties(JPH_Body* body);
+JPH_CAPI const JPH_SoftBodySharedSettings* JPH_SoftBodyMotionProperties_GetSettings(const JPH_SoftBodyMotionProperties* properties);
+JPH_CAPI uint32_t JPH_SoftBodyMotionProperties_GetVertexCount(const JPH_SoftBodyMotionProperties* properties);
+JPH_CAPI bool JPH_SoftBodyMotionProperties_GetVertex(const JPH_SoftBodyMotionProperties* properties, uint32_t index, JPH_SoftBodyVertex* outVertex);
+JPH_CAPI bool JPH_SoftBodyMotionProperties_GetVertexPosition(const JPH_SoftBodyMotionProperties* properties, uint32_t index, JPH_Vec3* outPosition);
+JPH_CAPI bool JPH_SoftBodyMotionProperties_GetVertexVelocity(const JPH_SoftBodyMotionProperties* properties, uint32_t index, JPH_Vec3* outVelocity);
+JPH_CAPI bool JPH_SoftBodyMotionProperties_SetVertexVelocity(JPH_SoftBodyMotionProperties* properties, uint32_t index, const JPH_Vec3* velocity);
+JPH_CAPI bool JPH_SoftBodyMotionProperties_GetVertexInvMass(const JPH_SoftBodyMotionProperties* properties, uint32_t index, float* outInvMass);
+JPH_CAPI bool JPH_SoftBodyMotionProperties_SetVertexInvMass(JPH_SoftBodyMotionProperties* properties, uint32_t index, float invMass);
+JPH_CAPI void JPH_SoftBodyMotionProperties_GetVertexPositions(const JPH_SoftBodyMotionProperties* properties, JPH_Vec3* outPositions, uint32_t capacity, uint32_t* outCount);
+JPH_CAPI uint32_t JPH_SoftBodyMotionProperties_GetFaceCount(const JPH_SoftBodyMotionProperties* properties);
+JPH_CAPI bool JPH_SoftBodyMotionProperties_GetFace(const JPH_SoftBodyMotionProperties* properties, uint32_t index, JPH_SoftFace* outFace);
+JPH_CAPI uint32_t JPH_SoftBodyMotionProperties_GetNumIterations(const JPH_SoftBodyMotionProperties* properties);
+JPH_CAPI void JPH_SoftBodyMotionProperties_SetNumIterations(JPH_SoftBodyMotionProperties* properties, uint32_t iterations);
+JPH_CAPI float JPH_SoftBodyMotionProperties_GetPressure(const JPH_SoftBodyMotionProperties* properties);
+JPH_CAPI void JPH_SoftBodyMotionProperties_SetPressure(JPH_SoftBodyMotionProperties* properties, float pressure);
+JPH_CAPI bool JPH_SoftBodyMotionProperties_GetUpdatePosition(const JPH_SoftBodyMotionProperties* properties);
+JPH_CAPI void JPH_SoftBodyMotionProperties_SetUpdatePosition(JPH_SoftBodyMotionProperties* properties, bool updatePosition);
+JPH_CAPI bool JPH_SoftBodyMotionProperties_GetFacesDoubleSided(const JPH_SoftBodyMotionProperties* properties);
+JPH_CAPI void JPH_SoftBodyMotionProperties_SetFacesDoubleSided(JPH_SoftBodyMotionProperties* properties, bool facesDoubleSided);
+JPH_CAPI bool JPH_SoftBodyMotionProperties_GetEnableSkinConstraints(const JPH_SoftBodyMotionProperties* properties);
+JPH_CAPI void JPH_SoftBodyMotionProperties_SetEnableSkinConstraints(JPH_SoftBodyMotionProperties* properties, bool enabled);
+JPH_CAPI float JPH_SoftBodyMotionProperties_GetSkinnedMaxDistanceMultiplier(const JPH_SoftBodyMotionProperties* properties);
+JPH_CAPI void JPH_SoftBodyMotionProperties_SetSkinnedMaxDistanceMultiplier(JPH_SoftBodyMotionProperties* properties, float multiplier);
+JPH_CAPI float JPH_SoftBodyMotionProperties_GetVertexRadius(const JPH_SoftBodyMotionProperties* properties);
+JPH_CAPI void JPH_SoftBodyMotionProperties_SetVertexRadius(JPH_SoftBodyMotionProperties* properties, float radius);
+JPH_CAPI void JPH_SoftBodyMotionProperties_GetLocalBounds(const JPH_SoftBodyMotionProperties* properties, JPH_AABox* result);
+JPH_CAPI float JPH_SoftBodyMotionProperties_GetVolume(const JPH_SoftBodyMotionProperties* properties);
+JPH_CAPI void JPH_SoftBodyMotionProperties_CalculateMassAndInertia(JPH_SoftBodyMotionProperties* properties);
+JPH_CAPI uint32_t JPH_SoftBodyMotionProperties_GetRodCount(const JPH_SoftBodyMotionProperties* properties);
+JPH_CAPI bool JPH_SoftBodyMotionProperties_GetRodRotation(const JPH_SoftBodyMotionProperties* properties, uint32_t index, JPH_Quat* result);
+JPH_CAPI bool JPH_SoftBodyMotionProperties_GetRodAngularVelocity(const JPH_SoftBodyMotionProperties* properties, uint32_t index, JPH_Vec3* result);
+JPH_CAPI void JPH_SoftBodyMotionProperties_SkinVertices(JPH_SoftBodyMotionProperties* properties, const JPH_RMat4* centerOfMassTransform, const JPH_Mat4* jointMatrices, uint32_t jointCount, bool hardSkinAll, JPH_TempAllocator* tempAllocator);
+JPH_CAPI void JPH_SoftBodyMotionProperties_CustomUpdate(JPH_SoftBodyMotionProperties* properties, float deltaTime, JPH_Body* body, JPH_PhysicsSystem* system);
 
 /* JPH_SoftBodyCreationSettings */
 JPH_CAPI JPH_SoftBodyCreationSettings* JPH_SoftBodyCreationSettings_Create(void);
@@ -3168,8 +3350,6 @@ JPH_CAPI void JPH_LinearCurve_GetPoint(const JPH_LinearCurve* curve, uint32_t in
 JPH_CAPI void JPH_LinearCurve_GetPoints(const JPH_LinearCurve* curve, JPH_Point* points, uint32_t* count);
 
 /* Temp Allocator */
-typedef struct JPH_TempAllocator JPH_TempAllocator;
-
 JPH_CAPI JPH_TempAllocator* JPH_TempAllocator_Create(uint32_t size);
 JPH_CAPI JPH_TempAllocator* JPH_TempAllocatorMalloc_Create(void);
 JPH_CAPI void JPH_TempAllocator_Destroy(JPH_TempAllocator* allocator);
