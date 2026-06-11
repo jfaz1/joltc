@@ -139,6 +139,8 @@ typedef struct JPH_Body									JPH_Body;
 typedef struct JPH_CollideShapeResult					JPH_CollideShapeResult;
 typedef struct JPH_ContactListener						JPH_ContactListener;
 typedef struct JPH_ContactManifold						JPH_ContactManifold;
+typedef struct JPH_SoftBodyContactListener					JPH_SoftBodyContactListener;
+typedef struct JPH_SoftBodyManifold						JPH_SoftBodyManifold;
 
 typedef struct JPH_GroupFilter							JPH_GroupFilter;
 typedef struct JPH_GroupFilterTable						JPH_GroupFilterTable;  /* Inherits JPH_GroupFilter */
@@ -189,6 +191,14 @@ typedef enum JPH_ValidateResult {
 	_JPH_ValidateResult_Count,
 	_JPH_ValidateResult_Force32 = 0x7fffffff
 } JPH_ValidateResult;
+
+typedef enum JPH_SoftBodyValidateResult {
+	JPH_SoftBodyValidateResult_AcceptContact = 0,
+	JPH_SoftBodyValidateResult_RejectContact = 1,
+
+	_JPH_SoftBodyValidateResult_Count,
+	_JPH_SoftBodyValidateResult_Force32 = 0x7fffffff
+} JPH_SoftBodyValidateResult;
 
 typedef enum JPH_ShapeType {
 	JPH_ShapeType_Convex = 0,
@@ -658,6 +668,13 @@ typedef struct JPH_ContactSettings {
 	JPH_Vec3				relativeLinearSurfaceVelocity;
 	JPH_Vec3				relativeAngularSurfaceVelocity;
 } JPH_ContactSettings;
+
+typedef struct JPH_SoftBodyContactSettings {
+	float					invMassScale1;
+	float					invMassScale2;
+	float					invInertiaScale2;
+	bool					isSensor;
+} JPH_SoftBodyContactSettings;
 
 typedef struct JPH_CollideSettingsBase {
 	/// How active edges (edges that a moving object should bump into) are handled
@@ -1250,6 +1267,7 @@ JPH_CAPI const JPH_NarrowPhaseQuery* JPH_PhysicsSystem_GetNarrowPhaseQuery(const
 JPH_CAPI const JPH_NarrowPhaseQuery* JPH_PhysicsSystem_GetNarrowPhaseQueryNoLock(const JPH_PhysicsSystem* system);
 
 JPH_CAPI void JPH_PhysicsSystem_SetContactListener(JPH_PhysicsSystem* system, JPH_ContactListener* listener);
+JPH_CAPI void JPH_PhysicsSystem_SetSoftBodyContactListener(JPH_PhysicsSystem* system, JPH_SoftBodyContactListener* listener);
 JPH_CAPI void JPH_PhysicsSystem_SetBodyActivationListener(JPH_PhysicsSystem* system, JPH_BodyActivationListener* listener);
 JPH_CAPI void JPH_PhysicsSystem_SetSimShapeFilter(JPH_PhysicsSystem* system, const JPH_SimShapeFilter* filter);
 
@@ -2533,6 +2551,22 @@ JPH_CAPI void JPH_ContactListener_SetProcs(const JPH_ContactListener_Procs* proc
 JPH_CAPI JPH_ContactListener* JPH_ContactListener_Create(void* userData);
 JPH_CAPI void JPH_ContactListener_Destroy(JPH_ContactListener* listener);
 
+/* Soft body contact listener */
+typedef struct JPH_SoftBodyContactListener_Procs {
+	JPH_SoftBodyValidateResult(JPH_API_CALL* OnSoftBodyContactValidate)(void* userData,
+		const JPH_Body* softBody,
+		const JPH_Body* otherBody,
+		JPH_SoftBodyContactSettings* ioSettings);
+
+	void(JPH_API_CALL* OnSoftBodyContactAdded)(void* userData,
+		const JPH_Body* softBody,
+		const JPH_SoftBodyManifold* manifold);
+} JPH_SoftBodyContactListener_Procs;
+
+JPH_CAPI void JPH_SoftBodyContactListener_SetProcs(const JPH_SoftBodyContactListener_Procs* procs);
+JPH_CAPI JPH_SoftBodyContactListener* JPH_SoftBodyContactListener_Create(void* userData);
+JPH_CAPI void JPH_SoftBodyContactListener_Destroy(JPH_SoftBodyContactListener* listener);
+
 /* BodyActivationListener */
 typedef struct JPH_BodyActivationListener_Procs {
 	void(JPH_API_CALL* OnBodyActivated)(void* userData, JPH_BodyID bodyID, uint64_t bodyUserData);
@@ -2560,6 +2594,18 @@ JPH_CAPI JPH_SubShapeID JPH_ContactManifold_GetSubShapeID2(const JPH_ContactMani
 JPH_CAPI uint32_t JPH_ContactManifold_GetPointCount(const JPH_ContactManifold* manifold);
 JPH_CAPI void JPH_ContactManifold_GetWorldSpaceContactPointOn1(const JPH_ContactManifold* manifold, uint32_t index, JPH_RVec3* result);
 JPH_CAPI void JPH_ContactManifold_GetWorldSpaceContactPointOn2(const JPH_ContactManifold* manifold, uint32_t index, JPH_RVec3* result);
+
+/* SoftBodyManifold */
+JPH_CAPI uint32_t JPH_SoftBodyManifold_GetVertexCount(const JPH_SoftBodyManifold* manifold);
+JPH_CAPI bool JPH_SoftBodyManifold_GetVertex(const JPH_SoftBodyManifold* manifold, uint32_t index, JPH_SoftBodyVertex* outVertex);
+JPH_CAPI bool JPH_SoftBodyManifold_HasContact(const JPH_SoftBodyManifold* manifold, uint32_t index);
+JPH_CAPI bool JPH_SoftBodyManifold_GetLocalContactPoint(const JPH_SoftBodyManifold* manifold, uint32_t index, JPH_Vec3* result);
+JPH_CAPI bool JPH_SoftBodyManifold_GetWorldContactPoint(const JPH_SoftBodyManifold* manifold, const JPH_Body* softBody, uint32_t index, JPH_RVec3* result);
+JPH_CAPI bool JPH_SoftBodyManifold_GetContactNormal(const JPH_SoftBodyManifold* manifold, uint32_t index, JPH_Vec3* result);
+JPH_CAPI bool JPH_SoftBodyManifold_GetWorldContactNormal(const JPH_SoftBodyManifold* manifold, const JPH_Body* softBody, uint32_t index, JPH_Vec3* result);
+JPH_CAPI JPH_BodyID JPH_SoftBodyManifold_GetContactBodyID(const JPH_SoftBodyManifold* manifold, uint32_t index);
+JPH_CAPI uint32_t JPH_SoftBodyManifold_GetSensorContactCount(const JPH_SoftBodyManifold* manifold);
+JPH_CAPI JPH_BodyID JPH_SoftBodyManifold_GetSensorContactBodyID(const JPH_SoftBodyManifold* manifold, uint32_t index);
 
 /* CharacterBase */
 JPH_CAPI void JPH_CharacterBase_Destroy(JPH_CharacterBase* character);

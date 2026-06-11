@@ -75,6 +75,8 @@ JPH_SUPPRESS_WARNINGS
 #include "Jolt/Physics/Vehicle/MotorcycleController.h"
 #include "Jolt/Physics/Vehicle/TrackedVehicleController.h"
 #include "Jolt/Physics/SoftBody/SoftBodyMotionProperties.h"
+#include "Jolt/Physics/SoftBody/SoftBodyContactListener.h"
+#include "Jolt/Physics/SoftBody/SoftBodyManifold.h"
 #include "Jolt/Physics/SoftBody/SoftBodySharedSettings.h"
 #include "Jolt/Physics/Vehicle/VehicleTrack.h"
 #include "Jolt/Core/LinearCurve.h"
@@ -114,6 +116,7 @@ using namespace JPH;
 
 //DEF_MAP_DECL(Quat, JPH_Quat)
 DEF_MAP_DECL(ContactManifold, JPH_ContactManifold)
+DEF_MAP_DECL(SoftBodyManifold, JPH_SoftBodyManifold)
 DEF_MAP_DECL(BodyCreationSettings, JPH_BodyCreationSettings)
 DEF_MAP_DECL(SoftBodyCreationSettings, JPH_SoftBodyCreationSettings)
 DEF_MAP_DECL(SoftBodySharedSettings, JPH_SoftBodySharedSettings)
@@ -390,6 +393,16 @@ static inline void FromJolt(const ContactSettings& jolt, JPH_ContactSettings* re
 	result->isSensor = jolt.mIsSensor;
 	FromJolt(jolt.mRelativeLinearSurfaceVelocity, &result->relativeLinearSurfaceVelocity);
 	FromJolt(jolt.mRelativeAngularSurfaceVelocity, &result->relativeAngularSurfaceVelocity);
+}
+
+static inline void FromJolt(const SoftBodyContactSettings& jolt, JPH_SoftBodyContactSettings* result)
+{
+	JPH_ASSERT(result);
+
+	result->invMassScale1 = jolt.mInvMassScale1;
+	result->invMassScale2 = jolt.mInvMassScale2;
+	result->invInertiaScale2 = jolt.mInvInertiaScale2;
+	result->isSensor = jolt.mIsSensor;
 }
 
 static inline const JPH_PhysicsMaterial* FromJolt(const JPH::PhysicsMaterial* joltMaterial)
@@ -821,6 +834,14 @@ static inline void ToJolt(ContactSettings& jolt, const JPH_ContactSettings* sett
 	jolt.mIsSensor = settings->isSensor;
 	jolt.mRelativeLinearSurfaceVelocity = ToJolt(settings->relativeLinearSurfaceVelocity);
 	jolt.mRelativeAngularSurfaceVelocity = ToJolt(settings->relativeAngularSurfaceVelocity);
+}
+
+static inline void ToJolt(SoftBodyContactSettings& jolt, const JPH_SoftBodyContactSettings* settings)
+{
+	jolt.mInvMassScale1 = settings->invMassScale1;
+	jolt.mInvMassScale2 = settings->invMassScale2;
+	jolt.mInvInertiaScale2 = settings->invInertiaScale2;
+	jolt.mIsSensor = settings->isSensor;
 }
 
 static void ToJolt(JPH::VehicleTrackSettings& joltTrack, const JPH_VehicleTrackSettings* track)
@@ -6419,6 +6440,14 @@ void JPH_PhysicsSystem_SetContactListener(JPH_PhysicsSystem* system, JPH_Contact
 	system->physicsSystem->SetContactListener(joltListener);
 }
 
+void JPH_PhysicsSystem_SetSoftBodyContactListener(JPH_PhysicsSystem* system, JPH_SoftBodyContactListener* listener)
+{
+	JPH_ASSERT(system);
+
+	auto joltListener = reinterpret_cast<JPH::SoftBodyContactListener*>(listener);
+	system->physicsSystem->SetSoftBodyContactListener(joltListener);
+}
+
 void JPH_PhysicsSystem_SetBodyActivationListener(JPH_PhysicsSystem* system, JPH_BodyActivationListener* listener)
 {
 	JPH_ASSERT(system);
@@ -8833,6 +8862,77 @@ void JPH_ContactListener_Destroy(JPH_ContactListener* listener)
 	}
 }
 
+/* Soft Body Contact Listener */
+class ManagedSoftBodyContactListener final : public JPH::SoftBodyContactListener
+{
+public:
+	static const JPH_SoftBodyContactListener_Procs* s_Procs;
+	void* userData = nullptr;
+
+	ManagedSoftBodyContactListener(void* userData_)
+		: userData(userData_)
+	{
+
+	}
+
+	SoftBodyValidateResult OnSoftBodyContactValidate(const Body& inSoftBody, const Body& inOtherBody, SoftBodyContactSettings& ioSettings) override
+	{
+		if (s_Procs != nullptr
+			&& s_Procs->OnSoftBodyContactValidate)
+		{
+			JPH_SoftBodyContactSettings settings = {};
+			FromJolt(ioSettings, &settings);
+
+			JPH_SoftBodyValidateResult result = s_Procs->OnSoftBodyContactValidate(
+				userData,
+				ToBody(&inSoftBody),
+				ToBody(&inOtherBody),
+				&settings
+			);
+
+			ToJolt(ioSettings, &settings);
+
+			return (JPH::SoftBodyValidateResult)result;
+		}
+
+		return JPH::SoftBodyValidateResult::AcceptContact;
+	}
+
+	void OnSoftBodyContactAdded(const Body& inSoftBody, const SoftBodyManifold& inManifold) override
+	{
+		if (s_Procs != nullptr
+			&& s_Procs->OnSoftBodyContactAdded)
+		{
+			s_Procs->OnSoftBodyContactAdded(
+				userData,
+				ToBody(&inSoftBody),
+				ToSoftBodyManifold(&inManifold)
+			);
+		}
+	}
+};
+
+const JPH_SoftBodyContactListener_Procs* ManagedSoftBodyContactListener::s_Procs = nullptr;
+
+void JPH_SoftBodyContactListener_SetProcs(const JPH_SoftBodyContactListener_Procs* procs)
+{
+	ManagedSoftBodyContactListener::s_Procs = procs;
+}
+
+JPH_SoftBodyContactListener* JPH_SoftBodyContactListener_Create(void* userData)
+{
+	auto listener = new ManagedSoftBodyContactListener(userData);
+	return reinterpret_cast<JPH_SoftBodyContactListener*>(listener);
+}
+
+void JPH_SoftBodyContactListener_Destroy(JPH_SoftBodyContactListener* listener)
+{
+	if (listener)
+	{
+		delete reinterpret_cast<ManagedSoftBodyContactListener*>(listener);
+	}
+}
+
 /* BodyActivationListener */
 class ManagedBodyActivationListener final : public JPH::BodyActivationListener
 {
@@ -8926,6 +9026,119 @@ void JPH_ContactManifold_GetWorldSpaceContactPointOn1(const JPH_ContactManifold*
 void JPH_ContactManifold_GetWorldSpaceContactPointOn2(const JPH_ContactManifold* manifold, uint32_t index, JPH_RVec3* result)
 {
 	FromJolt(AsContactManifold(manifold)->GetWorldSpaceContactPointOn2(index), result);
+}
+
+/* SoftBodyManifold */
+static inline const JPH::SoftBodyVertex* GetSoftBodyManifoldVertex(const JPH_SoftBodyManifold* manifold, uint32_t index)
+{
+	if (!manifold)
+		return nullptr;
+
+	const auto& vertices = AsSoftBodyManifold(manifold)->GetVertices();
+	if (index >= vertices.size())
+		return nullptr;
+
+	return &vertices[index];
+}
+
+uint32_t JPH_SoftBodyManifold_GetVertexCount(const JPH_SoftBodyManifold* manifold)
+{
+	return manifold ? static_cast<uint32_t>(AsSoftBodyManifold(manifold)->GetVertices().size()) : 0;
+}
+
+bool JPH_SoftBodyManifold_GetVertex(const JPH_SoftBodyManifold* manifold, uint32_t index, JPH_SoftBodyVertex* outVertex)
+{
+	if (!outVertex)
+		return false;
+
+	const JPH::SoftBodyVertex* vertex = GetSoftBodyManifoldVertex(manifold, index);
+	if (!vertex)
+		return false;
+
+	FromJolt(*vertex, outVertex);
+	return true;
+}
+
+bool JPH_SoftBodyManifold_HasContact(const JPH_SoftBodyManifold* manifold, uint32_t index)
+{
+	const JPH::SoftBodyVertex* vertex = GetSoftBodyManifoldVertex(manifold, index);
+	return vertex ? AsSoftBodyManifold(manifold)->HasContact(*vertex) : false;
+}
+
+bool JPH_SoftBodyManifold_GetLocalContactPoint(const JPH_SoftBodyManifold* manifold, uint32_t index, JPH_Vec3* result)
+{
+	if (!result)
+		return false;
+
+	const JPH::SoftBodyVertex* vertex = GetSoftBodyManifoldVertex(manifold, index);
+	if (!vertex || !AsSoftBodyManifold(manifold)->HasContact(*vertex))
+		return false;
+
+	FromJolt(AsSoftBodyManifold(manifold)->GetLocalContactPoint(*vertex), result);
+	return true;
+}
+
+bool JPH_SoftBodyManifold_GetWorldContactPoint(const JPH_SoftBodyManifold* manifold, const JPH_Body* softBody, uint32_t index, JPH_RVec3* result)
+{
+	if (!softBody || !result)
+		return false;
+
+	const JPH::SoftBodyVertex* vertex = GetSoftBodyManifoldVertex(manifold, index);
+	if (!vertex || !AsSoftBodyManifold(manifold)->HasContact(*vertex))
+		return false;
+
+	JPH::RVec3 worldContactPoint = AsBody(softBody)->GetCenterOfMassTransform() * AsSoftBodyManifold(manifold)->GetLocalContactPoint(*vertex);
+	FromJolt(worldContactPoint, result);
+	return true;
+}
+
+bool JPH_SoftBodyManifold_GetContactNormal(const JPH_SoftBodyManifold* manifold, uint32_t index, JPH_Vec3* result)
+{
+	if (!result)
+		return false;
+
+	const JPH::SoftBodyVertex* vertex = GetSoftBodyManifoldVertex(manifold, index);
+	if (!vertex || !AsSoftBodyManifold(manifold)->HasContact(*vertex))
+		return false;
+
+	FromJolt(AsSoftBodyManifold(manifold)->GetContactNormal(*vertex), result);
+	return true;
+}
+
+bool JPH_SoftBodyManifold_GetWorldContactNormal(const JPH_SoftBodyManifold* manifold, const JPH_Body* softBody, uint32_t index, JPH_Vec3* result)
+{
+	if (!softBody || !result)
+		return false;
+
+	const JPH::SoftBodyVertex* vertex = GetSoftBodyManifoldVertex(manifold, index);
+	if (!vertex || !AsSoftBodyManifold(manifold)->HasContact(*vertex))
+		return false;
+
+	JPH::Vec3 worldContactNormal = AsBody(softBody)->GetCenterOfMassTransform().Multiply3x3(AsSoftBodyManifold(manifold)->GetContactNormal(*vertex));
+	FromJolt(worldContactNormal, result);
+	return true;
+}
+
+JPH_BodyID JPH_SoftBodyManifold_GetContactBodyID(const JPH_SoftBodyManifold* manifold, uint32_t index)
+{
+	const JPH::SoftBodyVertex* vertex = GetSoftBodyManifoldVertex(manifold, index);
+	if (!vertex || !AsSoftBodyManifold(manifold)->HasContact(*vertex))
+		return JPH::BodyID::cInvalidBodyID;
+
+	return AsSoftBodyManifold(manifold)->GetContactBodyID(*vertex).GetIndexAndSequenceNumber();
+}
+
+uint32_t JPH_SoftBodyManifold_GetSensorContactCount(const JPH_SoftBodyManifold* manifold)
+{
+	return manifold ? AsSoftBodyManifold(manifold)->GetNumSensorContacts() : 0;
+}
+
+JPH_BodyID JPH_SoftBodyManifold_GetSensorContactBodyID(const JPH_SoftBodyManifold* manifold, uint32_t index)
+{
+	if (!manifold || index >= AsSoftBodyManifold(manifold)->GetNumSensorContacts())
+		return JPH::BodyID::cInvalidBodyID;
+
+	return AsSoftBodyManifold(manifold)->GetSensorContactBodyID(index).GetIndexAndSequenceNumber();
 }
 
 /* CharacterBaseSettings */
