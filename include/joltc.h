@@ -1769,6 +1769,7 @@ JPH_CAPI void JPH_SoftBodySharedSettings_Optimize(JPH_SoftBodySharedSettings* se
 JPH_CAPI void JPH_SoftBodySharedSettings_AddEdgeConstraint(JPH_SoftBodySharedSettings* settings, const JPH_SoftEdge* edge);
 JPH_CAPI uint32_t JPH_SoftBodySharedSettings_GetEdgeConstraintCount(const JPH_SoftBodySharedSettings* settings);
 JPH_CAPI bool JPH_SoftBodySharedSettings_GetEdgeConstraint(const JPH_SoftBodySharedSettings* settings, uint32_t index, JPH_SoftEdge* outEdge);
+JPH_CAPI bool JPH_SoftBodySharedSettings_SetEdgeRestLength(JPH_SoftBodySharedSettings* settings, uint32_t index, float restLength);
 
 JPH_CAPI void JPH_SoftBodySharedSettings_AddDihedralBendConstraint(JPH_SoftBodySharedSettings* settings, const JPH_SoftDihedralBend* bend);
 JPH_CAPI uint32_t JPH_SoftBodySharedSettings_GetDihedralBendConstraintCount(const JPH_SoftBodySharedSettings* settings);

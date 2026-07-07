@@ -4264,6 +4264,19 @@ bool JPH_SoftBodySharedSettings_GetEdgeConstraint(const JPH_SoftBodySharedSettin
 	return true;
 }
 
+bool JPH_SoftBodySharedSettings_SetEdgeRestLength(JPH_SoftBodySharedSettings* settings, uint32_t index, float restLength)
+{
+	if (!settings)
+		return false;
+
+	auto& edges = AsSoftBodySharedSettings(settings)->mEdgeConstraints;
+	if (index >= edges.size())
+		return false;
+
+	edges[index].mRestLength = restLength;
+	return true;
+}
+
 void JPH_SoftBodySharedSettings_AddDihedralBendConstraint(JPH_SoftBodySharedSettings* settings, const JPH_SoftDihedralBend* bend)
 {
 	if (settings && bend)
